@@ -1,4 +1,5 @@
 #include "rxcpp/rx.hpp"
+#include <join.h>
 
 namespace Rx {
 using namespace rxcpp;
@@ -30,20 +31,11 @@ void join_test()
     auto stream1 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(0, v); });
     auto stream2 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, v); });
     
-    auto join_stream = stream1.merge(stream2);
+    Selector<int, tuple<int, int>> s = [] (auto t) { return get<1>(t); };
+    Combiner<tuple<int, int, int, int>, tuple<int, int>, tuple<int, int>> comb = [] (auto t1, auto t2) { return tuple_cat(t1, t2); };
     
-    join_stream |
-        flat_map([] (auto t) -> rxcpp::observable<tuple<int,int>> {
-                if (get<0>(t) == 0) {
-                    stream1_map[get<1>(t)].push_back(get<1>(t));
-                    return rxcpp::observable<>::iterate(stream2_map[get<1>(t)]) | 
-                        rxcpp::operators::map([t] (int s2_val) { return make_tuple(get<1>(t), s2_val); });
-                } else {
-                    stream2_map[get<1>(t)].push_back(get<1>(t));
-                    return rxcpp::observable<>::iterate(stream1_map[get<1>(t)]) | 
-                        rxcpp::operators::map([t] (int s1_val) { return make_tuple(s1_val, get<1>(t)); });
-                }}) |
-        subscribe<tuple<int,int>>([] (auto t) { std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });
+    auto joined_stream = join<tuple<int,int>,tuple<int,int>,int,tuple<int,int,int,int>>()(stream1, stream2, s, s, comb);
+    joined_stream | subscribe<tuple<int,int, int, int>>([] (auto t) { std::cout << "<" << get<1>(t) << "," << get<3>(t) << ">\n"; });
 }
 
 void combine_test()
@@ -75,7 +67,7 @@ void combine_test()
 
 int main()
 {
-    //    join_test();
-    combine_test();
+    join_test();
+    //    combine_test();
     return 0;
 }
