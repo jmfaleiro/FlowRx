@@ -18,6 +18,13 @@ using namespace std::chrono;
 unordered_map<int, vector<int>> stream1_map;
 unordered_map<int, vector<int>> stream2_map;
 
+tuple<int, int> prev_t1;
+tuple<int, int, int> prev_t2;
+uint64_t v1 = 0;
+uint64_t v2 = 0;
+vector<tuple<int, int>> tuples1;
+vector<tuple<int, int, int>> tuples2;
+
 void join_test()
 {       
     auto stream1 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(0, v); });
@@ -39,8 +46,36 @@ void join_test()
         subscribe<tuple<int,int>>([] (auto t) { std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });
 }
 
+void combine_test()
+{
+    auto stream1 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(0, v); });
+    auto stream2 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, v, v); });
+    
+    auto join_stream1 = stream1 | rxcpp::operators::map([] (auto t) { tuples1.push_back(t); return make_tuple(t, tuples1); });
+    auto join_stream2 = stream2 | rxcpp::operators::map([] (auto t) { tuples2.push_back(t); return make_tuple(t, tuples2); });
+
+    join_stream1 | 
+        combine_latest([] (auto t1, auto t2) -> rxcpp::observable<tuple<int, int>> {
+                if (get<1>(t1).size() == v1) {
+                    v2 += 1;
+                    return rxcpp::observable<>::iterate(get<1>(t1)) |
+                        filter([t2] (auto t) { return get<1>(t) == get<1>(get<0>(t2)); }) |
+                        rxcpp::operators::map([t2] (auto t) { return make_tuple(get<1>(t), get<1>(get<0>(t2))); });
+                } else {
+                    v1 += 1;
+                    return rxcpp::observable<>::iterate(get<1>(t2)) |
+                        filter([t1] (auto t) {return get<1>(t) == get<1>(get<0>(t1)); }) |
+                        rxcpp::operators::map([t1] (auto t) { return make_tuple(get<1>(get<0>(t1)), get<1>(t)); });
+                }
+            }, 
+            join_stream2) |
+        flat_map([] (auto t) { return t; }) |
+    subscribe<tuple<int,int>>([] (auto t) { std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });    
+}
+
 int main()
 {
-    join_test();
+    //    join_test();
+    combine_test();
     return 0;
 }
