@@ -4,6 +4,7 @@
 #define FLOW_OPERATORS_SELECT_HPP
 
 #include <rxcpp/rx-includes.hpp>
+#include <flow-operators.hpp>
 
 namespace rxcpp {
 
