@@ -1,5 +1,7 @@
 #include "rxcpp/rx.hpp"
 #include <join.h>
+#include <operators/flow-project.hpp>
+#include <operators/flow-select.hpp>
 
 namespace Rx {
 using namespace rxcpp;
@@ -28,13 +30,15 @@ vector<tuple<int, int, int>> tuples2;
 
 void join_test()
 {       
-    auto stream1 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(0, v); });
-    auto stream2 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, v); });
+    auto s1_vals = {4, 4, 1, 4, 5};
+    auto stream1 = rxcpp::observable<>::iterate(s1_vals).map([] (int v) { return make_tuple(0, v); });
+    auto stream2 = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, (v % 5)); });
     
-    Selector<int, tuple<int, int>> s = [] (auto t) { return get<1>(t); };
-    Combiner<tuple<int, int, int, int>, tuple<int, int>, tuple<int, int>> comb = [] (auto t1, auto t2) { return tuple_cat(t1, t2); };
+    fl::Selector<int, tuple<int, int>> s = [] (auto t) { return get<1>(t); };
+    fl::Combiner<tuple<int, int, int, int>, tuple<int, int>, tuple<int, int>> comb = [] (auto t1, auto t2) { return tuple_cat(t1, t2); };
     
-    auto joined_stream = join<tuple<int,int>,tuple<int,int>,int,tuple<int,int,int,int>>()(stream1, stream2, s, s, comb);
+    //    auto joined_stream = stream1 fl::| fl_join<tuple<int,int>,tuple<int,int>,int,tuple<int,int,int,int>>(stream2, s, s, comb);
+    auto joined_stream = fl::join<tuple<int,int>,tuple<int,int>,int,tuple<int,int,int,int>>()(stream1, stream2, s, s, comb);
     joined_stream | subscribe<tuple<int,int, int, int>>([] (auto t) { std::cout << "<" << get<1>(t) << "," << get<3>(t) << ">\n"; });
 }
 
@@ -65,9 +69,34 @@ void combine_test()
     subscribe<tuple<int,int>>([] (auto t) { std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });    
 }
 
+void project_test()
+{
+    auto stream = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, v, v); });
+    stream | 
+    project([] (auto t) {
+            return t;
+    }) |
+    subscribe<tuple<int,int,int>>([] (auto t) {std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });
+}
+
+void select_test()
+{
+    auto stream = rxcpp::observable<>::interval(std::chrono::milliseconds(1000)).map([] (int v) { return make_tuple(1, v, v); });
+    stream | 
+    select([] (auto t) {
+            if ((get<1>(t) % 2) == 0)
+                return true;
+            else
+                return false;
+    }) |
+    subscribe<tuple<int,int,int>>([] (auto t) {std::cout << "<" << get<0>(t) << "," << get<1>(t) << ">\n"; });
+}
+
 int main()
 {
-    join_test();
+    //    project_test();
+    select_test();
+    //    join_test();
     //    combine_test();
     return 0;
 }
